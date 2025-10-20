@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: accessmanager-ai-backend
+    env: node
+    plan: starter
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    autoDeploy: true
+    envVars:
+      - key: WHOP_API_KEY
+        value: SddmtI_3s2Tz2YIKVoi-LrcLwUXjAgc23owq9rRHC7g
+      - key: WHOP_APP_ID
+        value: app_Ho4BcnZup7GHgf
+      - key: WHOP_WEBHOOK_SECRET
+        value: replace_with_whop_webhook_secret
+      - key: DISCORD_CLIENT_ID
+        value: your_discord_client_id
+      - key: DISCORD_CLIENT_SECRET
+        value: your_discord_client_secret
+      - key: DISCORD_BOT_TOKEN
+        value: your_discord_bot_token
+      - key: DISCORD_REDIRECT_URI
+        value: https://accessmanager-ai-backend.onrender.com/api/auth/discord/link/callback
+      - key: DATABASE_URL
+        value: ./backend/db/database.sqlite
+      - key: NODE_ENV
+        value: production
+  - type: static
+    name: accessmanager-ai-frontend
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /api/(.*)
+        destination: https://accessmanager-ai-backend.onrender.com/api/$1
