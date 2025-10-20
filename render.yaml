@@ -25,11 +25,15 @@ services:
         value: ./backend/db/database.sqlite
       - key: NODE_ENV
         value: production
-  - type: static
+
+  - type: web
     name: accessmanager-ai-frontend
+    env: node
     buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm run preview
     staticPublishPath: frontend/dist
     routes:
       - type: rewrite
         source: /api/(.*)
         destination: https://accessmanager-ai-backend.onrender.com/api/$1
+
