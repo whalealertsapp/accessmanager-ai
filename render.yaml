@@ -26,10 +26,10 @@ services:
       - key: NODE_ENV
         value: production
 
-  - type: static
+  - type: static_site
     name: accessmanager-ai-frontend
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
+    publishPath: frontend/dist
     routes:
       - type: rewrite
         source: /api/(.*)
