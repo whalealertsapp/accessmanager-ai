@@ -26,14 +26,11 @@ services:
       - key: NODE_ENV
         value: production
 
-  - type: web
+  - type: static
     name: accessmanager-ai-frontend
-    env: node
     buildCommand: cd frontend && npm install && npm run build
-    startCommand: cd frontend && npm run preview
     staticPublishPath: frontend/dist
     routes:
       - type: rewrite
         source: /api/(.*)
         destination: https://accessmanager-ai-backend.onrender.com/api/$1
-
