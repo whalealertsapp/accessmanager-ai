@@ -1,7 +1,7 @@
 import express from 'express';
-import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { Client, GatewayIntentBits } from 'discord.js';
+import { verifyWhopSignature } from '../utils/verifyWhopSignature.js'; // ✅ imported properly
 
 dotenv.config();
 const router = express.Router();
@@ -20,21 +20,6 @@ client.login(process.env.DISCORD_BOT_TOKEN);
 // Use express.raw() for webhooks (no bodyParser interference)
 router.use(express.raw({ type: '*/*' }));
 
-// ✅ Fixed: Verify Whop signature (safe for Buffers & JSON)
-function verifyWhopSignature(secret, body, signature) {
-  // Ensure body is a Buffer or convert it to one
-  const payload =
-    Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
-
-  const computed = crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-
-  // Timing-safe comparison to prevent attacks
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(computed));
-}
-
 router.post('/whop', async (req, res) => {
   try {
     const signature = req.headers['x-whop-signature'];
@@ -46,8 +31,8 @@ router.post('/whop', async (req, res) => {
       return res.status(400).json({ error: 'Missing signature or secret' });
     }
 
-    // Verify authenticity
-    const isValid = verifyWhopSignature(secret, rawBody, signature);
+    // ✅ Verify authenticity using imported utility
+    const isValid = verifyWhopSignature(rawBody, signature, secret);
     if (!isValid) {
       console.error('❌ Invalid Whop signature — possible spoof');
       return res.status(401).json({ error: 'Invalid signature' });
@@ -55,15 +40,14 @@ router.post('/whop', async (req, res) => {
 
     const json = JSON.parse(rawBody.toString());
     const eventType = json.event;
-    const discordId = json.data?.discord_user_id; // Expect this from Whop metadata
-    const guildId = process.env.DISCORD_GUILD_ID; // Your server ID
+    const discordId = json.data?.discord_user_id;
+    const guildId = process.env.DISCORD_GUILD_ID;
 
     console.log(`✅ Verified webhook from Whop: ${eventType}`);
     console.log('Payload:', json);
 
     // Handle membership events
     if (eventType === 'membership_went_valid') {
-      // Assign role
       const roleName = json.data?.product_name || 'Pro Access';
       const guild = await client.guilds.fetch(guildId);
       const member = await guild.members.fetch(discordId).catch(() => null);
@@ -78,7 +62,6 @@ router.post('/whop', async (req, res) => {
     }
 
     if (eventType === 'membership_went_invalid') {
-      // Remove role
       const roleName = json.data?.product_name || 'Pro Access';
       const guild = await client.guilds.fetch(guildId);
       const member = await guild.members.fetch(discordId).catch(() => null);
