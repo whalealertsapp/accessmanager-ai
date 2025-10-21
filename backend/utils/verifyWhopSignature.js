@@ -1,52 +1,45 @@
 import crypto from "crypto";
 
 /**
- * Verify Whop Webhook Signature (final version)
- * Supports both hex and base64 encodings, ensures Buffers, and avoids mismatch errors.
- * @param {Buffer|string} rawBody - Raw request body (Buffer preferred)
- * @param {string} signature - X-Whop-Signature header
+ * Verify Whop Webhook Signature
+ * @param {Buffer} rawBody - Raw request body as Buffer
+ * @param {string|string[]} signature - X-Whop-Signature header
  * @param {string} secret - Your Whop webhook secret
- * @returns {boolean}
+ * @returns {boolean} true if valid, false otherwise
  */
 export function verifyWhopSignature(rawBody, signature, secret) {
   try {
-    if (!rawBody || !signature || !secret) {
-      console.error("❌ Missing parameters for signature verification.");
-      return false;
-    }
+    if (!signature || !secret || !rawBody) return false;
 
-    // Ensure we have a Buffer (Express.raw provides this)
-    const payload =
-      Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(JSON.stringify(rawBody));
+    // Normalize signature
+    const sigString = Array.isArray(signature)
+      ? signature[0]
+      : String(signature || "").trim();
 
-    // Compute HMAC
+    // Compute HMAC SHA-256 in hex
     const computed = crypto
       .createHmac("sha256", secret)
-      .update(payload)
+      .update(rawBody)
       .digest("hex");
 
-    // Normalize signatures (handle array or string)
-    const received = Array.isArray(signature)
-      ? signature[0]
-      : signature.toString();
-
-    const a = Buffer.from(computed, "utf8");
-    const b = Buffer.from(received, "utf8");
-
-    if (a.length !== b.length) {
-      console.warn("⚠️ Signature length mismatch — rejecting.");
-      return false;
+    // Length must match or timingSafeEqual will throw
+    if (sigString.length !== computed.length) {
+      console.warn("⚠️ Signature length mismatch — adjusting for normalization");
+      return sigString.trim().toLowerCase() === computed.toLowerCase();
     }
 
-    const match = crypto.timingSafeEqual(a, b);
+    const valid = crypto.timingSafeEqual(
+      Buffer.from(sigString, "utf8"),
+      Buffer.from(computed, "utf8")
+    );
 
-    if (!match) {
-      console.error("❌ Invalid Whop signature — possible spoof.");
+    if (!valid) {
+      console.warn("❌ Signature mismatch — rejecting");
     }
 
-    return match;
+    return valid;
   } catch (err) {
-    console.error("❌ Signature verification error:", err);
+    console.error("❌ Signature verification error:", err.message);
     return false;
   }
 }
