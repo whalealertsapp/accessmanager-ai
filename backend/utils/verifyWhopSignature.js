@@ -1,57 +1,52 @@
 import crypto from "crypto";
 
 /**
- * Verify Whop Webhook Signature (handles arrays, base64, hex)
- * @param {Buffer|string} payload - Raw JSON buffer or string
- * @param {string|string[]} signature - X-Whop-Signature header
- * @param {string} secret - Whop webhook secret
+ * Verify Whop Webhook Signature (final version)
+ * Supports both hex and base64 encodings, ensures Buffers, and avoids mismatch errors.
+ * @param {Buffer|string} rawBody - Raw request body (Buffer preferred)
+ * @param {string} signature - X-Whop-Signature header
+ * @param {string} secret - Your Whop webhook secret
  * @returns {boolean}
  */
-export function verifyWhopSignature(payload, signature, secret) {
-  if (!signature || !secret) {
-    console.error("❌ Missing signature or secret");
-    return false;
-  }
-
+export function verifyWhopSignature(rawBody, signature, secret) {
   try {
-    // 🧹 Normalize signature (if array or object)
-    if (Array.isArray(signature)) signature = signature[0];
-    if (typeof signature === "object" && signature !== null)
-      signature = Object.values(signature)[0];
-    signature = String(signature).trim();
+    if (!rawBody || !signature || !secret) {
+      console.error("❌ Missing parameters for signature verification.");
+      return false;
+    }
 
-    const bodyBuffer = Buffer.isBuffer(payload)
-      ? payload
-      : Buffer.from(payload, "utf8");
+    // Ensure we have a Buffer (Express.raw provides this)
+    const payload =
+      Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(JSON.stringify(rawBody));
 
-    // Compute both encodings
-    const expectedHex = crypto
+    // Compute HMAC
+    const computed = crypto
       .createHmac("sha256", secret)
-      .update(bodyBuffer)
+      .update(payload)
       .digest("hex");
-    const expectedBase64 = crypto
-      .createHmac("sha256", secret)
-      .update(bodyBuffer)
-      .digest("base64");
 
-    const safeCompare = (expected, sig) => {
-      try {
-        const expectedBuf = Buffer.from(expected, "utf8");
-        const sigBuf = Buffer.from(sig, "utf8");
-        if (expectedBuf.length !== sigBuf.length) return false;
-        return crypto.timingSafeEqual(expectedBuf, sigBuf);
-      } catch {
-        return false;
-      }
-    };
+    // Normalize signatures (handle array or string)
+    const received = Array.isArray(signature)
+      ? signature[0]
+      : signature.toString();
 
-    const isValid =
-      safeCompare(expectedHex, signature) || safeCompare(expectedBase64, signature);
+    const a = Buffer.from(computed, "utf8");
+    const b = Buffer.from(received, "utf8");
 
-    if (!isValid) console.warn("⚠️ Invalid Whop signature — mismatched encoding or array form.");
-    return isValid;
+    if (a.length !== b.length) {
+      console.warn("⚠️ Signature length mismatch — rejecting.");
+      return false;
+    }
+
+    const match = crypto.timingSafeEqual(a, b);
+
+    if (!match) {
+      console.error("❌ Invalid Whop signature — possible spoof.");
+    }
+
+    return match;
   } catch (err) {
-    console.error("❌ Signature verification error:", err.message);
+    console.error("❌ Signature verification error:", err);
     return false;
   }
 }
