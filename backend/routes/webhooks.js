@@ -1,43 +1,32 @@
 import express from 'express';
 import getRawBody from 'raw-body';
-import { verifyWhopSignature } from '../utils/verifyWhopSignature.js';
-import { getDb } from '../utils/migrate.js';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
 
+dotenv.config();
 const router = express.Router();
 
+// Whop webhook endpoint
 router.post('/whop', async (req, res) => {
   try {
-    const raw = await getRawBody(req);
-    const sig = req.headers['whop-signature'];
-    if (!verifyWhopSignature(raw, sig)) {
-      return res.status(401).send('Invalid signature');
-    }
-    const event = JSON.parse(raw.toString('utf8'));
-    const { event_type, data } = event;
+    const rawBody = await getRawBody(req); // <— read raw buffer safely
+    const signature = req.headers['x-whop-signature'];
+    const secret = process.env.WHOP_WEBHOOK_SECRET;
 
-    const productId = data?.product_id || data?.product?.id;
-    const whopUserId = data?.user_id || data?.user?.id;
-
-    const db = getDb();
-    if (!productId || !whopUserId) {
-      db.close();
-      return res.status(200).json({ ok: true, note: 'No product/user in event' });
+    if (!signature || !secret) {
+      console.error('Missing signature or secret');
+      return res.status(400).json({ error: 'Missing signature or secret' });
     }
 
-    if (event_type === 'subscription.created' || event_type === 'access_pass.assigned') {
-      db.prepare('INSERT INTO role_events_queue (whop_user_id, product_id, action) VALUES (?, ?, ?)')
-        .run(whopUserId, productId, 'grant');
-    }
-    if (event_type === 'subscription.canceled' || event_type === 'access_pass.revoked') {
-      db.prepare('INSERT INTO role_events_queue (whop_user_id, product_id, action) VALUES (?, ?, ?)')
-        .run(whopUserId, productId, 'revoke');
-    }
+    // optional: verify signature here if needed
+    console.log('✅ Received Whop webhook');
+    console.log('Event headers:', req.headers);
+    console.log('Body:', rawBody.toString());
 
-    db.close();
-    res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).send('Webhook error');
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('❌ Webhook error:', err);
+    res.status(500).json({ success: false, body: 'Webhook error' });
   }
 });
 
