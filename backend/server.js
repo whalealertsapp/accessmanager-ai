@@ -20,3 +20,16 @@ app.use('/api/webhooks', webhookRoutes);
 const PORT = process.env.PORT || 8080;
 ensureDb();
 app.listen(PORT, () => console.log(`AccessManager.ai backend running on :${PORT}`));
+
+// === Discord Bot Initialization ===
+import { Client, GatewayIntentBits } from 'discord.js';
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+});
+
+client.once('ready', () => {
+  console.log(`🤖 AccessManager.ai bot logged in as ${client.user.tag}`);
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);
