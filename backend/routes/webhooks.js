@@ -6,10 +6,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 const router = express.Router();
 
-// Whop webhook endpoint
+// Explicitly disable Express JSON parsing for this route
+router.use(
+  express.raw({ type: '*/*' }) // accept any content type as raw
+);
+
 router.post('/whop', async (req, res) => {
   try {
-    const rawBody = await getRawBody(req); // <— read raw buffer safely
+    const rawBody = req.body; // already raw buffer from express.raw()
     const signature = req.headers['x-whop-signature'];
     const secret = process.env.WHOP_WEBHOOK_SECRET;
 
@@ -18,7 +22,6 @@ router.post('/whop', async (req, res) => {
       return res.status(400).json({ error: 'Missing signature or secret' });
     }
 
-    // optional: verify signature here if needed
     console.log('✅ Received Whop webhook');
     console.log('Event headers:', req.headers);
     console.log('Body:', rawBody.toString());
