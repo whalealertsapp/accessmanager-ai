@@ -2,9 +2,9 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import authRoutes from './routes/auth.js';
-import mappingRoutes from './routes/mappings.js';
-import webhookRoutes from './routes/webhooks.js';
+import authRoutes from './backend/routes/auth.js';
+import mappingRoutes from './backend/routes/mappings.js';
+import webhookRoutes from './backend/routes/webhooks.js';
 import { ensureDb } from './utils/migrate.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 
