@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 /**
- * Verify Whop Webhook Signature (handles hex safely)
+ * Verify Whop Webhook Signature (handles both hex & base64 safely)
  * @param {Buffer|string} payload - Raw JSON buffer or string
  * @param {string} signature - X-Whop-Signature header
  * @param {string} secret - Your Whop webhook secret
@@ -9,36 +9,41 @@ import crypto from "crypto";
  */
 export function verifyWhopSignature(payload, signature, secret) {
   if (!signature || !secret) {
-    console.error("Missing signature or secret");
+    console.error("❌ Missing signature or secret");
     return false;
   }
 
   try {
-    // Make sure payload is a Buffer
     const bodyBuffer = Buffer.isBuffer(payload)
       ? payload
       : Buffer.from(payload, "utf8");
 
-    // Compute the expected signature (hex string)
-    const expected = crypto
+    // Compute expected signature as both hex and base64
+    const hmac = crypto.createHmac("sha256", secret).update(bodyBuffer);
+    const expectedHex = hmac.digest("hex");
+    const expectedBase64 = crypto
       .createHmac("sha256", secret)
       .update(bodyBuffer)
-      .digest("hex");
+      .digest("base64");
 
-    // Convert both to Buffers with 'hex' encoding for safe comparison
-    const expectedBuf = Buffer.from(expected, "hex");
-    const signatureBuf = Buffer.from(signature, "hex");
+    // Convert to buffers safely (auto-detect format)
+    const tryCompare = (expected, sig) => {
+      const expectedBuf = Buffer.from(expected);
+      const sigBuf = Buffer.from(sig);
+      if (expectedBuf.length !== sigBuf.length) return false;
+      return crypto.timingSafeEqual(expectedBuf, sigBuf);
+    };
 
-    // Compare with constant-time check
-    if (expectedBuf.length !== signatureBuf.length) {
-      console.warn("⚠️ Signature length mismatch — likely invalid signature.");
-      return false;
-    }
+    const isValid =
+      tryCompare(expectedHex, signature) ||
+      tryCompare(expectedBase64, signature);
 
-    const isValid = crypto.timingSafeEqual(expectedBuf, signatureBuf);
+    if (!isValid)
+      console.warn("⚠️ Signature verification failed — mismatched encoding.");
+
     return isValid;
   } catch (err) {
-    console.error("❌ Signature verification failed:", err);
+    console.error("❌ Signature verification error:", err.message);
     return false;
   }
 }
