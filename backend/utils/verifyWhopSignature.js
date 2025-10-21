@@ -1,43 +1,44 @@
 import crypto from "crypto";
 
 /**
- * Verify Whop Webhook Signature
- * @param {string|Buffer|Object} payload - Raw JSON or Buffer from Whop webhook
+ * Verify Whop Webhook Signature (handles hex safely)
+ * @param {Buffer|string} payload - Raw JSON buffer or string
  * @param {string} signature - X-Whop-Signature header
  * @param {string} secret - Your Whop webhook secret
- * @returns {boolean} true if signature is valid, false otherwise
+ * @returns {boolean}
  */
 export function verifyWhopSignature(payload, signature, secret) {
-  if (!signature || !secret) return false;
+  if (!signature || !secret) {
+    console.error("Missing signature or secret");
+    return false;
+  }
 
   try {
-    // Ensure payload is a Buffer or string
-    const data = Buffer.isBuffer(payload)
+    // Make sure payload is a Buffer
+    const bodyBuffer = Buffer.isBuffer(payload)
       ? payload
-      : Buffer.from(
-          typeof payload === "string" ? payload : JSON.stringify(payload)
-        );
+      : Buffer.from(payload, "utf8");
 
-    const computed = crypto
+    // Compute the expected signature (hex string)
+    const expected = crypto
       .createHmac("sha256", secret)
-      .update(data)
+      .update(bodyBuffer)
       .digest("hex");
 
-    // Normalize both sides for safe comparison
-    const sigBuf = Buffer.from(signature.trim().toLowerCase(), "utf8");
-    const compBuf = Buffer.from(computed.trim().toLowerCase(), "utf8");
+    // Convert both to Buffers with 'hex' encoding for safe comparison
+    const expectedBuf = Buffer.from(expected, "hex");
+    const signatureBuf = Buffer.from(signature, "hex");
 
-    // Prevent RangeError on timingSafeEqual
-    if (sigBuf.length !== compBuf.length) {
-      console.warn(
-        "⚠️ Signature length mismatch — rejecting (likely invalid signature)."
-      );
+    // Compare with constant-time check
+    if (expectedBuf.length !== signatureBuf.length) {
+      console.warn("⚠️ Signature length mismatch — likely invalid signature.");
       return false;
     }
 
-    return crypto.timingSafeEqual(sigBuf, compBuf);
+    const isValid = crypto.timingSafeEqual(expectedBuf, signatureBuf);
+    return isValid;
   } catch (err) {
-    console.error("❌ Signature verification failed:", err.message);
+    console.error("❌ Signature verification failed:", err);
     return false;
   }
 }
