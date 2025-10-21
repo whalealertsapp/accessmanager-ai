@@ -36,10 +36,10 @@ function sanitizeRoleName(name) {
 
 router.post("/whop", async (req, res) => {
   try {
-    console.log("🧾 Incoming webhook headers:", req.headers); // <--- ADD THIS
-    const signature = req.headers["x-whop-signature"];
-    const secret = process.env.WHOP_WEBHOOK_SECRET;
-    const rawBody = req.body;
+    console.log("🧾 Incoming Whop webhook request:");
+console.log("Headers:", req.headers);
+console.log("Raw body type:", typeof req.body);
+
 
 
     // --- Optional test mode bypass ---
