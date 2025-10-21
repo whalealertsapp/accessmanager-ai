@@ -10,26 +10,32 @@ import { Client, GatewayIntentBits } from 'discord.js';
 
 const app = express();
 
-// ✅ This must come BEFORE bodyParser.json()
-// Ensures Whop webhook payload arrives as raw Buffer (not parsed Object)
-app.use('/api/webhooks/whop', express.raw({ type: '*/*' }));
+// Health check (safe)
+app.get('/api/health', (req, res) =>
+  res.json({ ok: true, name: 'AccessManager.ai' })
+);
 
-// Standard middlewares
+// === Apply RAW BODY parser ONLY for Whop ===
+// This ensures Whop webhooks stay raw for signature verification
+import webhookRouter from './routes/webhooks.js';
+app.use(
+  '/api/webhooks/whop',
+  express.raw({ type: '*/*' }),
+  webhookRouter
+);
+
+// === Apply normal middleware for everything else ===
 app.use(cors());
 app.use(bodyParser.json());
-
-// Health check
-app.get('/api/health', (req, res) => res.json({ ok: true, name: 'AccessManager.ai' }));
-
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/mappings', mappingRoutes);
-app.use('/api/webhooks', webhookRoutes);
 
-// Start server
+// === Start server ===
 const PORT = process.env.PORT || 8080;
 ensureDb();
-app.listen(PORT, () => console.log(`AccessManager.ai backend running on :${PORT}`));
+app.listen(PORT, () =>
+  console.log(`AccessManager.ai backend running on :${PORT}`)
+);
 
 // === Discord Bot Initialization ===
 const client = new Client({
