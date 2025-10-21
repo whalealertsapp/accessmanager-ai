@@ -2,62 +2,66 @@ import crypto from "crypto";
 
 /**
  * Verify Whop Webhook Signature
- * @param {Buffer|object|string} rawBody - Raw request body (may be Buffer or parsed JSON)
- * @param {string|string[]} signature - X-Whop-Signature header
- * @param {string} secret - Your Whop webhook secret
- * @returns {boolean} true if valid, false otherwise
+ * Handles both hex and base64 encodings + auto-normalization
+ * @param {Buffer|string} payload - raw request body
+ * @param {string} signatureHeader - x-whop-signature header
+ * @param {string} secret - your Whop webhook secret
  */
-export function verifyWhopSignature(rawBody, signature, secret) {
+export function verifyWhopSignature(payload, signatureHeader, secret) {
   try {
-    if (!signature || !secret || !rawBody) {
-      console.error("❌ Missing data for signature verification");
+    if (!signatureHeader || !secret) {
+      console.warn("⚠️ Missing signature or secret");
       return false;
     }
 
-    // Convert rawBody safely into a Buffer
-    const bodyBuffer =
-      Buffer.isBuffer(rawBody)
-        ? rawBody
-        : Buffer.from(
-            typeof rawBody === "string"
-              ? rawBody
-              : JSON.stringify(rawBody),
-            "utf8"
-          );
+    // Normalize payload → Buffer
+    const bodyBuffer = Buffer.isBuffer(payload)
+      ? payload
+      : Buffer.from(payload, "utf8");
 
-    // Normalize Whop signature (handle arrays, extra whitespace)
-    const sigString = Array.isArray(signature)
-      ? signature[0]
-      : String(signature || "").trim();
+    // Some Whop headers may contain prefixes like "sha256="
+    let receivedSig = signatureHeader.trim().replace(/^sha256=/i, "");
 
-    // Compute expected signature
-    const computed = crypto
+    // Normalize and detect encoding
+    let receivedBuf;
+    if (/^[0-9a-f]+$/i.test(receivedSig) && receivedSig.length % 2 === 0) {
+      receivedBuf = Buffer.from(receivedSig, "hex");
+    } else {
+      // fallback: base64 or mixed
+      try {
+        receivedBuf = Buffer.from(receivedSig, "base64");
+      } catch {
+        receivedBuf = Buffer.from(receivedSig, "utf8");
+      }
+    }
+
+    // Compute HMAC SHA256 in binary (Buffer)
+    const computedBuf = crypto
       .createHmac("sha256", secret)
       .update(bodyBuffer)
-      .digest("hex");
+      .digest();
 
-    // Compare safely
-    const sigBuf = Buffer.from(sigString, "utf8");
-    const compBuf = Buffer.from(computed, "utf8");
+    // Log partials for debugging (safe)
+    console.log(
+      `🧩 Sig length check: received=${receivedBuf.length}, computed=${computedBuf.length}`
+    );
 
-    if (sigBuf.length !== compBuf.length) {
+    // Ensure equal lengths for timingSafeEqual
+    if (receivedBuf.length !== computedBuf.length) {
       console.warn(
-        `⚠️ Signature length mismatch (${sigBuf.length} vs ${compBuf.length})`
+        `⚠️ Signature length mismatch (received ${receivedBuf.length} vs computed ${computedBuf.length})`
       );
       return false;
     }
 
-    const valid = crypto.timingSafeEqual(sigBuf, compBuf);
+    const match = crypto.timingSafeEqual(receivedBuf, computedBuf);
 
-    if (!valid) {
-      console.warn("❌ Signature mismatch — rejecting");
-    } else {
-      console.log("✅ Signature verified successfully");
-    }
+    if (!match) console.error("❌ Signature mismatch (digest differs)");
+    else console.log("✅ Whop signature verified successfully");
 
-    return valid;
+    return match;
   } catch (err) {
-    console.error("❌ Signature verification error:", err.message);
+    console.error("❌ Signature verification error:", err);
     return false;
   }
 }
