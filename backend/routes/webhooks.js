@@ -20,12 +20,18 @@ client.login(process.env.DISCORD_BOT_TOKEN);
 // Use express.raw() for webhooks (no bodyParser interference)
 router.use(express.raw({ type: '*/*' }));
 
-// Verify Whop signature
+// ✅ Fixed: Verify Whop signature (safe for Buffers & JSON)
 function verifyWhopSignature(secret, body, signature) {
+  // Ensure body is a Buffer or convert it to one
+  const payload =
+    Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
+
   const computed = crypto
     .createHmac('sha256', secret)
-    .update(body)
+    .update(payload)
     .digest('hex');
+
+  // Timing-safe comparison to prevent attacks
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(computed));
 }
 
@@ -33,7 +39,7 @@ router.post('/whop', async (req, res) => {
   try {
     const signature = req.headers['x-whop-signature'];
     const secret = process.env.WHOP_WEBHOOK_SECRET;
-    const rawBody = req.body; // Buffer
+    const rawBody = req.body; // Should be a Buffer from express.raw()
 
     if (!signature || !secret) {
       console.error('❌ Missing signature or secret');
