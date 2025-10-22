@@ -1,60 +1,42 @@
+// backend/utils/verifyWhopSignature.js
 import crypto from "crypto";
 
-/**
- * Verify Whop Webhook Signature (v1 format)
- * Handles headers like: t=timestamp,v1=hash
- */
-export function verifyWhopSignature(payload, signatureHeader, secret) {
+export function verifyWhopSignature(rawBodyBuffer, sigHeader, secret) {
   try {
-    if (!signatureHeader || !secret) {
-      console.warn("⚠️ Missing signature or secret");
-      return false;
-    }
+    if (!sigHeader || !secret) return false;
 
-    // Convert body safely to Buffer
-    const bodyBuffer = Buffer.isBuffer(payload)
-      ? payload
-      : Buffer.from(
-          typeof payload === "string" ? payload : JSON.stringify(payload),
-          "utf8"
-        );
-
-    // ✅ Extract v1 portion of header (after comma)
-    const match = /v1=([a-f0-9]+)/i.exec(signatureHeader);
+    const header = String(sigHeader);
+    const match = header.match(/v1=([a-f0-9]+)/i);
     if (!match) {
-      console.warn("⚠️ No v1 signature found in header:", signatureHeader);
+      console.error("❌ No v1 signature found in header");
       return false;
     }
-    const receivedSig = match[1].trim();
+    const received = match[1];
 
-    // Compute expected HMAC SHA256 hex digest
+    // Convert buffer to UTF-8 string since Whop signs the stringified body
+    const rawString =
+      Buffer.isBuffer(rawBodyBuffer)
+        ? rawBodyBuffer.toString("utf8")
+        : typeof rawBodyBuffer === "string"
+        ? rawBodyBuffer
+        : JSON.stringify(rawBodyBuffer);
+
+    // Whop HMAC uses sha256 of the string body directly
     const computed = crypto
       .createHmac("sha256", secret)
-      .update(bodyBuffer)
+      .update(rawString, "utf8")
       .digest("hex");
 
-    const receivedBuf = Buffer.from(receivedSig, "hex");
-    const computedBuf = Buffer.from(computed, "hex");
-
     console.log(
-      `🧩 Sig length check: received=${receivedBuf.length}, computed=${computedBuf.length}`
+      `🧩 Sig compare:\n  received=${received}\n  computed=${computed}`
     );
 
-    if (receivedBuf.length !== computedBuf.length) {
-      console.warn(
-        `⚠️ Signature length mismatch (received ${receivedBuf.length} vs computed ${computedBuf.length})`
-      );
-      return false;
-    }
-
-    const matchValid = crypto.timingSafeEqual(receivedBuf, computedBuf);
-
-    if (!matchValid) console.warn("❌ Signature mismatch — rejecting");
-    else console.log("✅ Whop signature verified successfully");
-
-    return matchValid;
+    return crypto.timingSafeEqual(
+      Buffer.from(received, "hex"),
+      Buffer.from(computed, "hex")
+    );
   } catch (err) {
-    console.error("❌ Signature verification error:", err);
+    console.error("verifyWhopSignature error:", err);
     return false;
   }
 }
