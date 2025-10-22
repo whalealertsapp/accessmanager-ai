@@ -10,32 +10,37 @@ import { Client, GatewayIntentBits } from 'discord.js';
 
 const app = express();
 
-// Health check (safe)
-app.get('/api/health', (req, res) =>
-  res.json({ ok: true, name: 'AccessManager.ai' })
-);
+// === Health check ===
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, name: 'AccessManager.ai' });
+});
 
-// === Apply RAW BODY parser ONLY for Whop ===
-// This ensures Whop webhooks stay raw for signature verification
-import webhookRouter from './routes/webhooks.js';
+// === Whop Webhooks (raw body for signature) ===
 app.use(
-  '/api/webhooks/whop',
+  '/api/webhooks',
   express.raw({ type: '*/*' }),
-  webhookRouter
+  webhookRoutes
 );
 
-// === Apply normal middleware for everything else ===
+// === Normal middleware for everything else ===
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/mappings', mappingRoutes);
 
-// === Start server ===
+// === Route Debugging Helper ===
+app._router && app._router.stack.forEach(r => {
+  if (r.route && r.route.path) {
+    console.log('🛣️ Registered route:', r.route.path);
+  }
+});
+
+// === Start Server ===
 const PORT = process.env.PORT || 8080;
 ensureDb();
-app.listen(PORT, () =>
-  console.log(`AccessManager.ai backend running on :${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`AccessManager.ai backend running on :${PORT}`);
+});
 
 // === Discord Bot Initialization ===
 const client = new Client({
